@@ -1,0 +1,9 @@
+<items>
+    <item name="RFXtrx" url="#rfxtrx" image="/rfxtrx_images/icon.png">
+        <subitem>
+            <name>Discovered devices</name>
+            <url>/rfxtrx_devices_view</url>
+            <description>Use this page to view discovered devices. This page can also be used to add the device to the HouseAgent database.</description>
+        </subitem>
+    </item>
+</items>

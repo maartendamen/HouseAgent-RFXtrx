@@ -1,0 +1,112 @@
+<%inherit file="/master.html"/>
+
+<%def name="head()">
+    <link rel="stylesheet" type="text/css" media="screen" href="/css/ui.jqgrid.css" />
+    <script src="/js/grid.locale-en.js" type="text/javascript"></script>
+    <script type="text/javascript" src="/js/jquery.jqGrid.min.js"></script>
+    <script type="text/javascript" src="/js/jquery.selectboxes.js"></script>
+
+    <script language='javascript'>
+        $(document).ready(function() {
+        
+            function add_device()
+            {
+                var device_address = jQuery("#devices").jqGrid('getGridParam','selrow');
+                
+                if (device_address == null) {
+                    alert('Please select a device to add to the database!');
+                    return false;
+                }
+            
+			    var win = $('<div></div>');
+			    var deviceName = $('<span>Device name: </span><input id="device_name" type="text" style="width:100%"></input><br>');
+			    var pluginID = ${pluginid};
+			    
+			    var locOptions = "";
+			    % for l in locations:
+			         locOptions += "<option value='${l[0]}'>${l[1]}</option>";
+			    % endfor
+			    
+			    var locList = $('<span>Location: </span><select id="locations" style="width:100%">' + locOptions + '</select>');
+			    deviceName.appendTo(win);
+			    locList.appendTo(win);
+			
+			    // Display dialog
+			    $(win).dialog({
+			        'title': 'Provide device details',
+			        'width': 340,
+			        'modal': true,
+			        'buttons': {
+			            'Ok': function() {
+			                $(this).dialog('close');
+			                
+			                var locationID = $("#locations option:selected");
+			                var dataString = 'address=' + device_address + '&name=' + $("#device_name").val() + '&plugin_id=' + pluginID + '&location_id=' + locationID.val();                
+				            $.ajax({
+				                      type: 'PUT',
+				                      url: '/rfxtrx_devices',
+				                      data: dataString
+				                    });
+				            return true;  			                
+			                
+			            },
+			            'Cancel': function() {
+			                $(this).dialog('close');
+			            }
+			        }
+			    });
+            }
+                                
+            jQuery("#devices").jqGrid({
+                url:'/rfxtrx_devices',
+                datatype: "json",
+                colNames:['Device ID','Device type', 'Device subtype', 'RSSI', 'In HouseAgent DB'],
+                colModel:[
+                    {name:'id',index:'id', width:220,editable:true,editoptions:{size:20}},
+                    {name:'type',index:'type', width:220,editable:true,editoptions:{size:20}},
+                    {name:'subtype',index:'subtype', width:220,editable:true,editoptions:{size:20}},
+                    {name:'rssi',index:'rssi', width:220,editable:true,editoptions:{size:20}},
+                    {name:'database',index:'database', width:220,editable:true,editoptions:{size:20}, formatter: "checkbox"},
+                ],
+                rowNum:10,
+                rowList:[10,20,30],
+                pager: '#pagernav',
+                sortname: 'id',
+                viewrecords: true,
+                sortorder: "desc",
+                caption:"RFXtrx Devices",
+                editurl:"rfxtrx_devices",
+                height:300,
+                width:850,
+                jsonReader: {
+                    repeatitems: false,
+                    id: "id",
+                    root: function (obj) { return obj; },
+                    page: function (obj) { return 1; },
+                    total: function (obj) { return 1; },
+                    records: function (obj) { return obj.length; }
+                },
+                loadComplete: function() {
+                },                                
+            });
+            
+            $("#devices").jqGrid('navGrid', '#pagernav',
+                {edit: false, search: false, del: false, add: false, refresh: false}, 
+                { // Edit parameters
+                    mtype: "PUT",
+                    url: "devices",
+                    width: 380,
+                }, {width: 380},
+                false);
+                
+            jQuery("#devices").jqGrid('navGrid',"#pagernav").jqGrid('navButtonAdd',"#pagernav",{ caption:"Add to HouseAgent", buttonicon:"ui-icon ui-icon-plus", onClickButton:add_device, position: "last", title:"Add device to HouseAgent", cursor: "pointer" });
+        });
+        
+    </script>
+</%def>
+<%def name="content()">
+<div class="HeadText">RFXtrx discovered devices</div>
+<p>This page allows you to manage HouseAgent locations. Possible locations include: physical locations (offices/houses) or rooms (living room, bathroom) etc.</p>
+<table id="devices"></table>
+<div id="pagernav"></div>  
+</%def>
