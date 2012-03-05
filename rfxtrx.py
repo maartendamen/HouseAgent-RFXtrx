@@ -5,6 +5,7 @@ import os
 from houseagent.plugins import pluginapi
 from twisted.internet import reactor
 from twisted.internet.serialport import SerialPort
+from houseagent.plugins.pluginapi import Logging
 
 class RFXtrxGlobals():
     '''
@@ -204,7 +205,7 @@ class RFXTranceiver(object):
         self.x10 = False     
         
     def __repr__(self):
-        return 'Display undecoded packets: %r, Proguard: %r, FS20: %r, La Crosse: %r, Hideki: %r, LightwaveRF: %r, Mertik: %r '  \
+        return '[RFXtrxTransceiver] Display undecoded packets: %r, Proguard: %r, FS20: %r, La Crosse: %r, Hideki: %r, LightwaveRF: %r, Mertik: %r '  \
                'Visonic: %r, ATI: %r, Oregon Scientific: %r, Ikea-Koppla: %r, HomeEasy EU: %r, AC: %r, ARC: %r, X10: %r' % \
                 (self.undecoded, self.proguard, self.fs20, self.lacrosse, self.hideki, self.lightwaverf, self.mertik, self.visonic,
                  self.ati, self.oregon, self.ikeakoppla, self.home_easy, self.ac, self.arc, self.x10)
@@ -213,12 +214,13 @@ class RFXtrxProtocol(protocol.Protocol):
     '''
     The class that handles the RFXtrx protocol.
     '''
-    def __init__(self, wrapper):
+    def __init__(self, wrapper, log):
         self.packet_length = 0
         self.payload = []
         self._lighting_devices = []
         self._devices = []
         self._wrapper = wrapper
+        self._log = log
            
     def dataReceived(self, data):
         '''
@@ -228,7 +230,7 @@ class RFXtrxProtocol(protocol.Protocol):
         
         self.payload += data        
         if len(self.payload) == ord(self.payload[0]) + 1:
-            print "full response:", repr(self.payload)
+            self._log.debug('Received full packet response:%r' % (self.payload))
             self._handle_response(self.payload[1:])
             self.payload = []
     
@@ -236,7 +238,7 @@ class RFXtrxProtocol(protocol.Protocol):
         '''
         This function is called when a serial connection has been made.
         '''
-        print "connection made"
+        self._log.debug('Serial connection made, sending reset sequence to RFXtrx...')
         self._reset()
         
     def _handle_response(self, response):
@@ -287,7 +289,7 @@ class RFXtrxProtocol(protocol.Protocol):
         elif response_type == 0x71:
             self._handle_rfxmeter_response(response[1:])
         else:
-            print "Unsupported: %r" % (response_type)
+            self._log.debug('Unsupported response received: %r, please report to the HouseAgent team!' % (response_type))
 
     def _handle_temp_hum_baro(self, response):
         '''
@@ -329,8 +331,13 @@ class RFXtrxProtocol(protocol.Protocol):
         device.forecast = forecast
         device.rssi = rssi
         device.battery = battery
+
+        self._log.debug('Handled response: %r' % device)
         
-        print device
+        # Report to master broker
+        values = {'Temperature': str(temperature), 'Humidity': str(humidity), 'Barometer': str(barometer),
+                  'Forecast': str(forecast), 'Battery': str(battery)}
+        self._report(id, values)
 
     def _handle_wind_response(self, response):
         '''
@@ -366,7 +373,12 @@ class RFXtrxProtocol(protocol.Protocol):
         device.gust = gust
         device.battery = battery_level
 
-        print device
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
+        values = {'Direction': str(direction), 'Average speed': str(average_speed), 'Gust': str(gust),
+                  'Battery': str(battery_level)}
+        self._report(id, values)
 
     def _handle_security1_response(self, response):
         '''
@@ -394,6 +406,12 @@ class RFXtrxProtocol(protocol.Protocol):
         
         device.status = status
         device.battery_level = battery_level
+        
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
+        values = {'Status': str(status), 'Battery level': str(battery_level)}
+        self._report(id, values)
             
     def _handle_rfxmeter_response(self, response):
         '''
@@ -415,6 +433,12 @@ class RFXtrxProtocol(protocol.Protocol):
         
         device.rssi = rssi
         device.counter = counter
+        
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
+        values = {'Counter': str(counter)}
+        self._report(id, values)        
             
     def _handle_temphumi_response(self, response):
         '''
@@ -454,6 +478,13 @@ class RFXtrxProtocol(protocol.Protocol):
         device.rssi = rssi
         device.battery_level = battery_level
         device.humidity_status = humidity_status
+        
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
+        values = {'Temperature': str(temperature), 'Humidity': str(humidity), 'Humidity status': humidity_status,
+                  'Battery': battery_level}
+        self._report(id, values)          
             
     def _handle_weight_response(self, response):
         '''
@@ -478,6 +509,10 @@ class RFXtrxProtocol(protocol.Protocol):
         device.rssi = rssi
         
     def _handle_lighting_response(self, response):
+        '''
+        Handle lighting1 response type
+        @param response: the receiver response
+        '''
         
         type = 'LIGHTING'
         subtype = RFXtrxGlobals.LIGHTING_TYPES[ord(response[0])]
@@ -495,7 +530,13 @@ class RFXtrxProtocol(protocol.Protocol):
             self._devices.append(device)
             
         device.command = command
-        device.rssi = rssi        
+        device.rssi = rssi
+        
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
+        values = {'Status': str(command)}
+        self._report(id, values)            
             
     def _handle_lighting2_response(self, response):
         '''
@@ -521,11 +562,11 @@ class RFXtrxProtocol(protocol.Protocol):
         device.command = command
         device.rssi = rssi
         
-        print device
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
         values = {'Status': str(command)}
-
-        if self._wrapper:
-            self._wrapper.pluginapi.value_update(id, values)
+        self._report(id, values)
             
     def _handle_temperature_response(self, response):
         '''
@@ -554,6 +595,12 @@ class RFXtrxProtocol(protocol.Protocol):
         device.temperature = temperature
         device.rssi = rssi
         device.battery_level = battery_level
+        
+        self._log.debug('Handled response: %r' % device)
+        
+        # Report to master broker
+        values = {'Temperature': str(temperature), 'Battery': battery_level}
+        self._report(id, values)           
         
     def _device_exists(self, id, type):
         '''
@@ -595,6 +642,8 @@ class RFXtrxProtocol(protocol.Protocol):
         transceiver.arc = bool(ord(response[7]) & 0x02)
         transceiver.x10 = bool(ord(response[7]) & 0x01)
         
+        self._log.debug('Transceiver status response received: %r' % (transceiver))
+        
         # Set plugin as ready
         self._wrapper.pluginapi.ready()
         
@@ -611,11 +660,21 @@ class RFXtrxProtocol(protocol.Protocol):
         '''
         self.transport.write('\x0D\x00\x00\x01\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
+    def _report(self, id, values):
+        '''
+        Helper function that reports the supplied values to the master broker.
+        
+        @param id: the address/id of the device
+        @param values: values to be reported.
+        '''
+        if self._wrapper:
+            self._wrapper.pluginapi.value_update(id, values)
+
 class RFXtrxWrapper(object):
 
     def __init__(self):
         '''
-        Load initial JeeLabs configuration from jeelabs.conf
+        Load initial RFXtrx configuration from rfxtrx.conf
         '''   
         config = ConfigParser.RawConfigParser()
         config.read(os.path.join('rfxtrx.conf'))
@@ -625,7 +684,7 @@ class RFXtrxWrapper(object):
         self.coordinator_host = config.get("coordinator", "host")
         self.coordinator_port = config.getint("coordinator", "port")
         
-        self.logging = config.getboolean('general', 'logging')
+        self.loglevel = config.get('general', 'loglevel')
         self.id = config.get('general', 'id')
 
         callbacks = {'custom': self.cb_custom}
@@ -633,7 +692,10 @@ class RFXtrxWrapper(object):
                                              broker_host=self.coordinator_host, 
                                              broker_port=self.coordinator_port, **callbacks)
         
-        self.protocol = RFXtrxProtocol(self) 
+        log = Logging("RFXtrx", console=True)
+        log.set_level(self.loglevel)
+        
+        self.protocol = RFXtrxProtocol(self, log) 
         myserial = SerialPort (self.protocol, self.port, reactor)
         myserial.setBaudRate(38400)
         reactor.run(installSignalHandlers=0)
