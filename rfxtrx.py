@@ -6,6 +6,7 @@ from houseagent.plugins import pluginapi
 from twisted.internet import reactor
 from twisted.internet.serialport import SerialPort
 from houseagent.plugins.pluginapi import Logging
+from houseagent import config_to_location
 
 class RFXtrxGlobals():
     '''
@@ -676,8 +677,10 @@ class RFXtrxWrapper(object):
         '''
         Load initial RFXtrx configuration from rfxtrx.conf
         '''   
+        config_file = config_to_location('rfxtrx.conf')
+        
         config = ConfigParser.RawConfigParser()
-        config.read(os.path.join('rfxtrx.conf'))
+        config.read(os.path.join(config_file))
         self.port = config.get("serial", "port")
 
         # Get broker information (ZeroMQ)
