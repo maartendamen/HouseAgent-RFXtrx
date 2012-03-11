@@ -7,9 +7,14 @@ from mako.lookup import TemplateLookup
 from mako.template import Template
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
+import sys
 
 def init_pages(web, coordinator, db):
-    web.putChild("rfxtrx_images", File(os.path.join('houseagent/plugins/rfxtrx/templates/images')))
+    
+    if hasattr(sys, 'frozen'):
+        web.putChild("rfxtrx_images", File(os.path.join(os.path.dirname(sys.executable), 'plugins/rfxtrx/templates/images')))
+    else:
+        web.putChild("rfxtrx_images", File(os.path.join('houseagent/plugins/rfxtrx/templates/images')))
     web.putChild('rfxtrx_devices', RFXtrxDevices(coordinator, db))
     web.putChild('rfxtrx_devices_view', RFXtrxDevicesView(db, coordinator))
 
@@ -21,8 +26,15 @@ class RFXtrxDevicesView(Resource):
         Resource.__init__(self)
 
     def finished(self, locations):
-        lookup = TemplateLookup(directories=['houseagent/templates/'])
-        template = Template(filename='houseagent/plugins/rfxtrx/templates/devices.html', lookup=lookup)
+        
+        if hasattr(sys, 'frozen'):
+            # Special case when we are frozen.
+            lookup = TemplateLookup(directories=[os.path.join(os.path.dirname(sys.executable), 'templates/')])
+            template = Template(filename=os.path.join(os.path.dirname(sys.executable), 'plugins/rfxtrx/templates/devices.html'), lookup=lookup)
+        else:    
+            lookup = TemplateLookup(directories=['houseagent/templates/'])
+            template = Template(filename='houseagent/plugins/rfxtrx/templates/devices.html', lookup=lookup)
+            
         self.request.write(str(template.render(locations=locations, pluginid=self.pluginid)))
         self.request.finish()
     
