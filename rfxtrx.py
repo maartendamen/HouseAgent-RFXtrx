@@ -715,9 +715,6 @@ class RFXtrxWrapper(object):
             d = defer.Deferred()
             d.callback(devices)
             return d
-
-if __name__ == '__main__':    
-    wrapper = RFXtrxWrapper()
     
 if os.name == 'nt':        
     class RFXtrxService(pluginapi.WindowsService):
