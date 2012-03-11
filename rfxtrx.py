@@ -718,3 +718,23 @@ class RFXtrxWrapper(object):
 
 if __name__ == '__main__':    
     wrapper = RFXtrxWrapper()
+    
+if os.name == 'nt':        
+    class RFXtrxService(pluginapi.WindowsService):
+        '''
+        This class provides a Windows Service interface for the RFXtrx plugin.
+        '''
+        _svc_name_ = "harfxtrx"
+        _svc_display_name_ = "HouseAgent - RFXtrx Service"
+        
+        def start(self):
+            '''
+            Start the Zwave interface.
+            '''
+            RFXtrxWrapper()
+        
+if __name__ == '__main__':
+    if os.name == 'nt':
+        pluginapi.handle_windowsservice(RFXtrxService) # We want to start as a Windows service on Windows.
+    else:
+        RFXtrxWrapper()
