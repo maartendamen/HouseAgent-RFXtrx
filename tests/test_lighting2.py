@@ -7,7 +7,7 @@ response2 = ['\x0b', '\x11', '\x00', '|', '\x00', '\x16', '\xae', '*', '\x0c', '
 class Test(unittest.TestCase):
 
     def setUp(self):
-        self.protocol = RFXtrxProtocol(None)
+        self.protocol = RFXtrxProtocol(None, None)
         self.protocol._handle_lighting2_response(response[2:])
         self.protocol._handle_lighting2_response(response2[2:])
         

@@ -333,7 +333,7 @@ class RFXtrxProtocol(protocol.Protocol):
         device.rssi = rssi
         device.battery = battery
 
-        self._log.debug('Handled response: %r' % device)
+        if self._log: self._log.debug('Handled response: %r' % device)
         
         # Report to master broker
         values = {'Temperature': str(temperature), 'Humidity': str(humidity), 'Barometer': str(barometer),
@@ -374,7 +374,7 @@ class RFXtrxProtocol(protocol.Protocol):
         device.gust = gust
         device.battery = battery_level
 
-        self._log.debug('Handled response: %r' % device)
+        if self._log: self._log.debug('Handled response: %r' % device)
         
         # Report to master broker
         values = {'Direction': str(direction), 'Average speed': str(average_speed), 'Gust': str(gust),
@@ -408,7 +408,7 @@ class RFXtrxProtocol(protocol.Protocol):
         device.status = status
         device.battery_level = battery_level
         
-        self._log.debug('Handled response: %r' % device)
+        if self._log: self._log.debug('Handled response: %r' % device)
         
         # Report to master broker
         values = {'Status': str(status), 'Battery level': str(battery_level)}
@@ -527,13 +527,13 @@ class RFXtrxProtocol(protocol.Protocol):
         device = self._device_exists(id, type)
         
         if not device:
-            device = LightingDevice(id, type, subtype)
+            device = LightingDevice(id, type, subtype, rssi)
             self._devices.append(device)
             
         device.command = command
         device.rssi = rssi
         
-        self._log.debug('Handled response: %r' % device)
+        if self._log: self._log.debug('Handled response: %r' % device)
         
         # Report to master broker
         values = {'Status': str(command)}
@@ -563,7 +563,7 @@ class RFXtrxProtocol(protocol.Protocol):
         device.command = command
         device.rssi = rssi
         
-        self._log.debug('Handled response: %r' % device)
+        if self._log: self._log.debug('Handled response: %r' % device)
         
         # Report to master broker
         values = {'Status': str(command)}

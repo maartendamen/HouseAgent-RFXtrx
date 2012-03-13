@@ -6,7 +6,7 @@ response = ['\x08', ' ', '\x00', '\x9d', '\xd3', '\xdc', 'T', '\x00', 'i']
 class Test(unittest.TestCase):
 
     def setUp(self):
-        self.protocol = RFXtrxProtocol(None)
+        self.protocol = RFXtrxProtocol(None, None)
         self.protocol._handle_security1_response(response[2:])
 
     def testStatus(self):

@@ -7,7 +7,7 @@ response = ['\x0D', '\x54', '\x02', '\x01', '\x94', '\x00', '\x00', '\xD0', '\x2
 class Test(unittest.TestCase):
 
     def setUp(self):
-        self.protocol = RFXtrxProtocol(None)
+        self.protocol = RFXtrxProtocol(None, None)
         self.protocol._handle_temp_hum_baro(response[2:])
         
     def testSubtype(self):

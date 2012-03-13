@@ -7,7 +7,7 @@ response = ['\x10','\x56','\x01','\x03','\x2F', '\x00', '\x00', '\xF7', '\x00', 
 class Test(unittest.TestCase):
 
     def setUp(self):
-        self.protocol = RFXtrxProtocol(None)
+        self.protocol = RFXtrxProtocol(None, None)
         self.protocol._handle_wind_response(response[2:])
 
     def testID(self):
