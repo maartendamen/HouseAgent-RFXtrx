@@ -590,7 +590,7 @@ class RFXtrxProtocol(protocol.Protocol):
         device = self._device_exists(id, type)
         
         if not device:
-            device = TemperatureSensor(id, type, subtype)
+            device = TemperatureSensor(id, type, subtype, rssi)
             self._devices.append(device)
         
         device.temperature = temperature
