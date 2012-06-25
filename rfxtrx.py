@@ -12,7 +12,7 @@ class RFXtrxGlobals():
     '''
     This class defines static constants used within the code.
     '''
-    TRANSCEIVER_TYPES = {0x50: '310MHz', 0x51: '315MHz', 0x53: '433.92MHz', 0x55: '868.00MHz',
+    TRANSCEIVER_TYPES = {0x50: '310MHz', 0x51: '315MHz', 0x52: '433.92MHz RecvOnly', 0x53: '433.92MHz', 0x55: '868.00MHz',
                          0x56: '868.00MHz FSK', 0x57: '868.30MHz', 0x58: '868.30MHz FSK', 
                          0x59: '868.35MHz', 0x5A: '868.35MHz FSK', 0x5B: '868.95MH'}
     
@@ -56,6 +56,13 @@ class RFXtrxGlobals():
     RFXMETER_TYPES = {0x00: 'RFXMeter counter'}
     WIND_TYPES = {0x01: 'WTGR800', 0x02: 'WGR800', 0x03: 'STR918, WGR918', 0x04: 'TFA'}
     TEMP_HUM_BARO_TYPES = {0x01: 'BTHR918', 0x02: 'BTHR918N, BTHR968'}
+    RAIN_TYPES = {0x01: 'RGR126/682/918', 0x02: 'PCR800', 0x03: 'TFA', 0x04: 'UPM RG700', 0x05: 'WS2300'}
+    
+#    0x01 = RAIN1 is RGR126/682/918 
+#    0x02 = RAIN2 is PCR800 
+#    0x03 = RAIN3 is TFA 
+#    0x04 = RAIN4 is UPM RG700 
+#    0x05 = RAIN5 is WS2300 
     
 class RFXtrxDevice(object):
     '''
@@ -80,7 +87,7 @@ class LightingDevice(RFXtrxDevice):
         return '[LightingDevice] id: %r, type: %r, subtype: %r, unit: %r, command: %r, rssi: %r' % (self.id, self.type, self.subtype, self.unit, 
                                                                                                     self.command, self.rssi)   
 
-class TemperatureSensor(object):
+class TemperatureSensor(RFXtrxDevice):
     '''
     Abstract class to represent a temperature sensor.
     '''
@@ -178,6 +185,22 @@ class WindSensor(RFXtrxDevice):
         return '[WindSensor] id: %r, type: %r, subtype: %r, direction: %r, average speed: %r, wind gust: %r, battery: %r, rssi: %r' % (self.id, self.type, self.subtype, 
                                                                                                                                        self.direction, self.average_speed, self.gust,
                                                                                                                                        self.battery, self.rssi)    
+
+class RainSensor(RFXtrxDevice):
+    '''
+    This abstract class represents a rain sensor.
+    '''
+    def __init__(self, id, type, subtype, rssi):
+        RFXtrxDevice.__init__(self, id, type, subtype, rssi)
+        self.rain_rate = None
+        self.total_rain = None
+        self.battery = None
+        
+    def __repr__(self):
+        return '[RainSensor] id: %r, type: %r, subtype: %r, rain rate: %r, total rain: %r, battery: %r, rssi: %r' % (self.id, self.type, self.subtype, 
+                                                                                                                                       self.rain_rate, self.total_rain, 
+                                                                                                                                       self.battery, self.rssi)    
+    
 
 class RFXTranceiver(object):
     '''
@@ -278,6 +301,10 @@ class RFXtrxProtocol(protocol.Protocol):
         elif response_type == 0x54:
             self._handle_temp_hum_baro(response[1:])
         
+        # RAIN
+        elif response_type == 0x55:
+            self._handle_rain(response[1:])
+        
         # WIND
         elif response_type == 0x56:
             self._handle_wind_response(response[1:])
@@ -292,6 +319,48 @@ class RFXtrxProtocol(protocol.Protocol):
         else:
             self._log.debug('Unsupported response received: %r, please report to the HouseAgent team!' % (response_type))
 
+    def _handle_rain(self, response):
+        '''
+        Handle rain sensor response (0x55)
+        @param response: the receiver response
+        '''
+        
+        type = 'RAIN'
+        subtype = RFXtrxGlobals.RAIN_TYPES[ord(response[0])]
+        id = ord(response[2]) * 256 + ord(response[3])
+        rain_rate = None        
+        
+        if subtype == RFXtrxGlobals.RAIN_TYPES[0x01]:
+            rain_rate = ord(response[4]) * 256 + ord(response[5])
+        elif subtype == RFXtrxGlobals.RAIN_TYPES[0x02]:
+            rain_rate = ord(response[4]) * 256 + ord(response[5]) / 100
+            
+        total_rain = ord(response[6]) * 65535 + ord(response[7]) * 256 + ord(response[8])
+
+        if ord(response[9]) & 0xF == 0:
+            battery = 'Low'
+        else:
+            battery = 'Ok'
+        
+        rssi = ord(response[9]) >> 4
+        
+        device = self._device_exists(id, type)
+        
+        if not device:
+            device = RainSensor(id, type, subtype, rssi)
+            self._devices.append(device)
+        
+        device.battery = battery
+        device.rain_rate = rain_rate
+        device.total_rain = total_rain
+
+        if self._log: self._log.debug('Handled response: %r' % device)
+
+        # Report to master broker
+        values = {'Rain rate': str(rain_rate), 'Total rain': str(total_rain), 'Battery': str(battery)}
+        self._report(id, values)
+
+
     def _handle_temp_hum_baro(self, response):
         '''
         Handle temperature humidity and barometric response (0x54)
@@ -301,10 +370,10 @@ class RFXtrxProtocol(protocol.Protocol):
         subtype = RFXtrxGlobals.TEMP_HUM_BARO_TYPES[ord(response[0])]
         id = ord(response[2]) * 256 + ord(response[3])
 
-        if ord(response[4]) & 0x80 == 0:
-            temperature = "%2.1f" % (ord(response[4]) * 256.0 + ord(response[5]) / 10.0)
+        if ord(response[4]) & 0x80 == 0:           
+            temperature = "%2.2f" % ( (ord(response[4]) * 256 + ord(response[5])) / 10.0 ) 
         else:
-            temperature = "-%2.1f" % (ord(response[4]) & 0x7F * 256.0 + ord(response[5]) / 10.0)
+            temperature = "-%2.1f" % ( (ord(response[4]) & 0x7F * 256.0 + ord(response[5])) / 10.0)
             
         humidity = ord(response[6])
         #humidity_status = RFXtrxGlobals.HUMIDITY_STATUS[ord(response[7])]
@@ -452,9 +521,9 @@ class RFXtrxProtocol(protocol.Protocol):
         id = ord(response[2]) * 256 + ord(response[3])
         
         if ord(response[4]) & 0x80 == 0:
-            temperature = "%2.2f" % (ord(response[4]) * 256.0 + ord(response[5]) / 10.0)
+            temperature = "%2.2f" % ( (ord(response[4]) * 256.0 + ord(response[5])) / 10.0)
         else:
-            temperature = "-%2.2f" % (ord(response[4]) & 0x7F * 256.0 + ord(response[5]) / 10.0)
+            temperature = "-%2.2f" % ( (ord(response[4]) & 0x7F * 256.0 + ord(response[5])) / 10.0)
             
         humidity = ord(response[6])
         humidity_status = RFXtrxGlobals.HUMIDITY_STATUS[ord(response[7])]
@@ -533,6 +602,8 @@ class RFXtrxProtocol(protocol.Protocol):
         device.command = command
         device.rssi = rssi
         
+        print device
+        
         if self._log: self._log.debug('Handled response: %r' % device)
         
         # Report to master broker
@@ -580,9 +651,9 @@ class RFXtrxProtocol(protocol.Protocol):
         id = ord(response[2]) * 256 + ord(response[3])
         
         if ord(response[4]) & 0x80 == 0:
-            temperature = "%2.2f" % (ord(response[4]) * 256.0 + ord(response[5]) / 10.0)
+            temperature = "%2.2f" % ( (ord(response[4]) * 256.0 + ord(response[5])) / 10.0)
         else:
-            temperature = "-%2.2f" % (ord(response[4]) & 0x7F * 256.0 + ord(response[5]) / 10.0)
+            temperature = "-%2.2f" % ( (ord(response[4]) & 0x7F * 256.0 + ord(response[5])) / 10.0)
             
         rssi = ord(response[6]) >> 4
         battery_level = ord(response[6]) & 0xF
